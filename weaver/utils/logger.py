@@ -22,11 +22,14 @@ def _configLogger(name, stdout=sys.stdout, filename=None, loglevel=logging.INFO)
         logger.addHandler(logfile)
 
 
-class ColoredLogger():
+class ColoredLogger():  #
+    '''
+    A logger that can print colored messages to the console
+    '''
     color_dict = {
-        'black': '\033[0;30m',
-        'red': '\033[0;31m',
-        'green': '\033[0;32m',
+        'black': '\033[0;30m',  # "\033[" is the escape character
+        'red': '\033[0;31m',  # followed by "0;30" which is the text style and color code
+        'green': '\033[0;32m',  # and "m" is the end of the escape sequence
         'orange': '\033[0;33m',
         'blue': '\033[0;34m',
         'purple': '\033[0;35m',
@@ -44,18 +47,18 @@ class ColoredLogger():
 
         'bold': '\033[1m',
         'endcolor': '\033[0m',
-    }
+    }  #
 
-    def __init__(self, name):
-        self.logger = logging.getLogger(name)
+    def __init__(self, name):  #
+        self.logger = logging.getLogger(name)  #
 
-    def colorize(self, msg, color):
-        return self.color_dict[color] + msg + self.color_dict['endcolor']
+    def colorize(self, msg, color):  #
+        return self.color_dict[color] + msg + self.color_dict['endcolor']  #
 
-    def debug(self, msg, *args, color=None, **kwargs):
+    def debug(self, msg, *args, color=None, **kwargs):  #
         if color:
-            msg = self.colorize(msg, color)
-        self.logger.debug(msg, *args, **kwargs)
+            msg = self.colorize(msg, color)  #
+        self.logger.debug(msg, *args, **kwargs)  #
 
     def info(self, msg, *args, color=None, **kwargs):
         if color:
@@ -73,7 +76,7 @@ class ColoredLogger():
         self.logger.error(msg, *args, **kwargs)
 
 
-_logger = ColoredLogger('weaver')
+_logger = ColoredLogger('weaver')  #
 
 _warning_counter = {}
 

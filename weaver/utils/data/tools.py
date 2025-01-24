@@ -17,13 +17,13 @@ def _concat(arrays, axis=0):
         return ak.concatenate(arrays, axis=axis)
 
 
-def _stack(arrays, axis=1):
-    if len(arrays) == 0:
-        return np.array([])
-    if isinstance(arrays[0], np.ndarray):
-        return np.stack(arrays, axis=axis)
-    else:
-        s = [slice(None)] * (arrays[0].ndim + 1)
+def _stack(arrays, axis=1):  # axis=0: stack vertically, axis=1: stack horizontally
+    if len(arrays) == 0:  #
+        return np.array([])  #
+    if isinstance(arrays[0], np.ndarray):  #
+        return np.stack(arrays, axis=axis)  #
+    else:  # maybe Akward
+        s = [slice(None)] * (arrays[0].ndim + 1)  # ???
         s[axis] = np.newaxis
         s = tuple(s)
         return ak.concatenate([a.__getitem__(s) for a in arrays], axis=axis)
@@ -114,11 +114,41 @@ def _p4_from_ptetaphim(pt, eta, phi, mass):
     return vector.zip({'pt': pt, 'eta': eta, 'phi': phi, 'mass': mass})
 
 
-def _get_variable_names(expr, exclude=['awkward', 'ak', 'np', 'numpy', 'math', 'len']):
-    import ast
-    root = ast.parse(expr)
+def _get_variable_names(expr, exclude=['awkward', 'ak', 'np', 'numpy', 'math', 'len']):  # expr: str
+    '''
+    Get the variable names in the expression excluding the excluded ones then sort them by name.
+    eg1: _get_variable_names('a + b') -> ['a', 'b']
+    eg2: _get_variable_names('a + b + c + a') -> ['a', 'b', 'c']
+
+    '''
+    import ast  # Abstract Syntax Tree, used to parse the code as a tree
+    root = ast.parse(expr)  # parse the expression, get the root node
+    '''
+    for example, if the expression is 'a + b', then the root node is:
+    
+    root
+  |
+  Expression
+    |
+  BinOp
+  /    \
+Name    Name
+ |      |
+'a'     'b'
+
+    '''
     return sorted({node.id for node in ast.walk(root) if isinstance(
         node, ast.Name) and not node.id.startswith('_')} - set(exclude))
+
+# ast.walk(root) returns all the nodes in the tree, and node.id is the name of the node
+# isinstance(node, ast.Name) checks if the node is a variable
+# not node.id.startswith('_') checks if the variable name starts with '_'
+# {node.id for node in ast.walk(root) if isinstance(node, ast.Name) and not node.id.startswith('_')} returns set of variable names, {... if ...} is a set production
+# set(exclude) converts the exclude list to a set
+# - set(exclude) returns the difference between the two sets
+# sorted(...) sorts the variable names
+# whole eg: _get_variable_names('a + b + c + a') -> {'a', 'b', 'c'} - {'awkward', 'ak', 'np', 'numpy', 'math', 'len'} -> {'a', 'b', 'c'} -> ['a', 'b', 'c']
+
 
 
 def _eval_expr(expr, table):

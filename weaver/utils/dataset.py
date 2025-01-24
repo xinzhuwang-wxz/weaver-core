@@ -14,8 +14,8 @@ from .data.config import DataConfig, _md5
 from .data.preprocess import _apply_selection, _build_new_variables, _build_weights, AutoStandardizer, WeightMaker
 
 
-def _collate_awkward_array_fn(batch, *, collate_fn_map=None):
-    return _stack(batch, axis=0)
+def _collate_awkward_array_fn(batch, *, collate_fn_map=None):  #
+    return _stack(batch, axis=0)  #
 
 
 def _finalize_inputs(table, data_config):
@@ -298,7 +298,7 @@ class SimpleIterDataset(torch.utils.data.IterableDataset):
                  for_training=True, load_range_and_fraction=None, extra_selection=None,
                  fetch_by_files=False, fetch_step=0.01, file_fraction=1, remake_weights=False, up_sample=True,
                  weight_scale=1, max_resample=10, async_load=True, infinity_mode=False, in_memory=False, name=''):
-        self._iters = {} if infinity_mode or in_memory else None
+        self._iters = {} if infinity_mode or in_memory else None  #
         _init_args = set(self.__dict__.keys())
         self._init_file_dict = file_dict
         self._init_load_range_and_fraction = load_range_and_fraction
@@ -312,33 +312,34 @@ class SimpleIterDataset(torch.utils.data.IterableDataset):
 
         # ==== sampling parameters ====
         self._sampler_options = {
-            'up_sample': up_sample,
-            'weight_scale': weight_scale,
-            'max_resample': max_resample,
+            'up_sample': up_sample,  #
+            'weight_scale': weight_scale,  #
+            'max_resample': max_resample,  #
         }
 
         # ==== torch collate_fn map ====
-        from torch.utils.data._utils.collate import default_collate_fn_map
-        default_collate_fn_map.update({ak.Array: _collate_awkward_array_fn})
+        from torch.utils.data._utils.collate import default_collate_fn_map  #
+        default_collate_fn_map.update({ak.Array: _collate_awkward_array_fn})  #  checkpoint: start whth "_stack"
 
         if for_training:
-            self._sampler_options.update(training=True, shuffle=True, reweight=True)
+            self._sampler_options.update(training=True, shuffle=True, reweight=True)  # auto update as dict
         else:
             self._sampler_options.update(training=False, shuffle=False, reweight=False)
 
         # discover auto-generated reweight file
-        if '.auto.yaml' in data_config_file:
-            data_config_autogen_file = data_config_file
+        if '.auto.yaml' in data_config_file:  # if data_config_file' s name is end by '.auto.yaml', it means that the file is auto-generated
+            data_config_autogen_file = data_config_file  #
         else:
-            data_config_md5 = _md5(data_config_file)
-            data_config_autogen_file = data_config_file.replace('.yaml', '.%s.auto.yaml' % data_config_md5)
-            if os.path.exists(data_config_autogen_file):
-                data_config_file = data_config_autogen_file
+            data_config_md5 = _md5(data_config_file)  #
+            data_config_autogen_file = data_config_file.replace('.yaml', '.%s.auto.yaml' % data_config_md5)  # named by hash value, it could makesure the file name unique
+            if os.path.exists(data_config_autogen_file):  #
+                data_config_file = data_config_autogen_file  # update data_config_file to data_config_autogen_file
                 _logger.info('Found file %s w/ auto-generated preprocessing information, will use that instead!' %
-                             data_config_file)
+                             data_config_file)  #
 
         # load data config (w/ observers now -- so they will be included in the auto-generated yaml)
-        self._data_config = DataConfig.load(data_config_file)
+        # data_config_file is a yaml file
+        self._data_config = DataConfig.load(data_config_file)  # load() is a class method
 
         if for_training:
             # produce variable standardization info if needed
@@ -366,7 +367,7 @@ class SimpleIterDataset(torch.utils.data.IterableDataset):
         # derive all variables added to self.__dict__
         self._init_args = set(self.__dict__.keys()) - _init_args
 
-    @property
+    @property  # property decorator: read-only
     def config(self):
         return self._data_config
 
@@ -379,7 +380,7 @@ class SimpleIterDataset(torch.utils.data.IterableDataset):
             worker_id = worker_info.id if worker_info is not None else 0
             try:
                 return self._iters[worker_id]
-            except KeyError:
+            except KeyError:  # if worker_id is not in self._iters, then create a new _SimpleIter object
                 kwargs = {k: copy.deepcopy(self.__dict__[k]) for k in self._init_args}
                 self._iters[worker_id] = _SimpleIter(**kwargs)
                 return self._iters[worker_id]
