@@ -9,24 +9,30 @@ from .tools import _get_variable_names, _eval_expr
 from .fileio import _read_files
 
 
-def _apply_selection(table, selection, funcs=None):
+def _apply_selection(table, selection, funcs=None):  #
+    """
+    function signature:
+        table: awkward array
+        selection: str
+        funcs: dict, {var_name: expr}   <-- (new_variables in config)
+    """
     if selection is None:
         return table
     if funcs:
-        new_vars = {k: funcs[k] for k in _get_variable_names(selection) if k not in table.fields and k in funcs}
-        _build_new_variables(table, new_vars)
-    selected = ak.values_astype(_eval_expr(selection, table), 'bool')
-    return table[selected]
+        new_vars = {k: funcs[k] for k in _get_variable_names(selection) if k not in table.fields and k in funcs}  # k is vars not in table.fields
+        _build_new_variables(table, new_vars)  # in place
+    selected = ak.values_astype(_eval_expr(selection, table), 'bool')  # the selected shape is (n,) where n is the number of events
+    return table[selected]  #
 
 
-def _build_new_variables(table, funcs):
+def _build_new_variables(table, funcs):  #
     if funcs is None:
         return table
-    for k, expr in funcs.items():
-        if k in table.fields:
+    for k, expr in funcs.items():  # funcs: {var_name: expr} <-- (new_variables in config)
+        if k in table.fields:  # skip if the variable already exists
             continue
-        table[k] = _eval_expr(expr, table)
-    return table
+        table[k] = _eval_expr(expr, table)  # modify the table in place
+    return table  #
 
 
 def _build_weights(table, data_config, reweight_hists=None):
@@ -80,77 +86,77 @@ class AutoStandardizer(object):
     """
 
     def __init__(self, filelist, data_config):
-        if isinstance(filelist, dict):
-            filelist = sum(filelist.values(), [])
+        if isinstance(filelist, dict):  # dict of {label: filelist}, eg. {'signal': ['file1.root', 'file2.root'], 'background': ['file3.root']}
+            filelist = sum(filelist.values(), [])  # flatten the list, eg ['file1.root', 'file2.root', 'file3.root']
         self._filelist = filelist if isinstance(
-            filelist, (list, tuple)) else glob.glob(filelist)
-        self._data_config = data_config.copy()
-        self.load_range = (0, data_config.preprocess.get('data_fraction', 0.1))
+            filelist, (list, tuple)) else glob.glob(filelist)  # The pattern may contain simple shell-style wildcards, eg. 'data/*.root'
+        self._data_config = data_config.copy()  #
+        self.load_range = (0, data_config.preprocess.get('data_fraction', 0.1))  # (start, end) fraction of the data to load
 
     def read_file(self, filelist):
-        keep_branches = set()
-        aux_branches = set()
-        load_branches = set()
-        for k, params in self._data_config.preprocess_params.items():
-            if params['center'] == 'auto':
-                keep_branches.add(k)
-                load_branches.add(k)
-        if self._data_config.selection:
-            load_branches.update(_get_variable_names(self._data_config.selection))
+        keep_branches = set()  #
+        aux_branches = set()  #
+        load_branches = set()  #
+        for k, params in self._data_config.preprocess_params.items():  #
+            if params['center'] == 'auto':  #
+                keep_branches.add(k)  #
+                load_branches.add(k)  #
+        if self._data_config.selection:  #
+            load_branches.update(_get_variable_names(self._data_config.selection))  #
 
-        func_vars = set(self._data_config.var_funcs.keys())
-        while (load_branches & func_vars):
-            for k in (load_branches & func_vars):
-                aux_branches.add(k)
-                load_branches.remove(k)
-                load_branches.update(_get_variable_names(self._data_config.var_funcs[k]))
+        func_vars = set(self._data_config.var_funcs.keys())  #
+        while load_branches & func_vars:  # # while there are variables in load_branches that are also in func_vars, need to calculate the new variables first before loading them
+            for k in (load_branches & func_vars):  #
+                aux_branches.add(k)  #
+                load_branches.remove(k)  #
+                load_branches.update(_get_variable_names(self._data_config.var_funcs[k]))  # add the variables as components of the new variable to load_branches
 
-        _logger.debug('[AutoStandardizer] keep_branches:\n  %s', ','.join(keep_branches))
+        _logger.debug('[AutoStandardizer] keep_branches:\n  %s', ','.join(keep_branches))  # eg. 'var1,var2,var3'
         _logger.debug('[AutoStandardizer] aux_branches:\n  %s', ','.join(aux_branches))
         _logger.debug('[AutoStandardizer] load_branches:\n  %s', ','.join(load_branches))
 
         table = _read_files(filelist, load_branches, self.load_range, show_progressbar=True,
                             treename=self._data_config.treename,
-                            branch_magic=self._data_config.branch_magic, file_magic=self._data_config.file_magic)
-        table = _apply_selection(table, self._data_config.selection, funcs=self._data_config.var_funcs)
-        table = _build_new_variables(table, {k: v for k, v in self._data_config.var_funcs.items() if k in aux_branches})
-        table = table[keep_branches]
+                            branch_magic=self._data_config.branch_magic, file_magic=self._data_config.file_magic)  # return a dict
+        table = _apply_selection(table, self._data_config.selection, funcs=self._data_config.var_funcs)  #
+        table = _build_new_variables(table, {k: v for k, v in self._data_config.var_funcs.items() if k in aux_branches})  # because there are base vars in table, so can calculate the new vars
+        table = table[keep_branches]  # select the branches to keep
         return table
 
     def make_preprocess_params(self, table):
-        _logger.info('Using %d events to calculate standardization info', len(table))
-        preprocess_params = copy.deepcopy(self._data_config.preprocess_params)
-        for k, params in self._data_config.preprocess_params.items():
-            if params['center'] == 'auto':
-                if k.endswith('_mask'):
-                    params['center'] = None
+        _logger.info('Using %d events to calculate standardization info', len(table))  #
+        preprocess_params = copy.deepcopy(self._data_config.preprocess_params)  #
+        for k, params in self._data_config.preprocess_params.items():  #
+            if params['center'] == 'auto':  #
+                if k.endswith('_mask'):  # if the variable is a mask, then the center and scale are None
+                    params['center'] = None  #
                 else:
-                    a = ak.to_numpy(ak.flatten(table[k], axis=None))
+                    a = ak.to_numpy(ak.flatten(table[k], axis=None))  #
                     # check for NaN
-                    if np.any(np.isnan(a)):
+                    if np.any(np.isnan(a)):  # isnan(a) returns a boolean array with the same shape as a, where True indicates that the value is NaN
                         _logger.warning('[AutoStandardizer] Found NaN in `%s`, will convert it to 0.', k)
-                        time.sleep(10)
-                        a = np.nan_to_num(a)
-                    low, center, high = np.percentile(a, [16, 50, 84])
-                    scale = max(high - center, center - low)
-                    scale = 1 if scale == 0 else 1. / scale
-                    params['center'] = float(center)
-                    params['scale'] = float(scale)
-                preprocess_params[k] = params
-                _logger.info('[AutoStandardizer] %s low=%s, center=%s, high=%s, scale=%s', k, low, center, high, scale)
+                        time.sleep(10)  #
+                        a = np.nan_to_num(a)  # replace NaN with zero
+                    low, center, high = np.percentile(a, [16, 50, 84])  #
+                    scale = max(high - center, center - low)  #
+                    scale = 1 if scale == 0 else 1. / scale  #
+                    params['center'] = float(center)  #
+                    params['scale'] = float(scale)  #
+                preprocess_params[k] = params  #
+                _logger.info('[AutoStandardizer] %s low=%s, center=%s, high=%s, scale=%s', k, low, center, high, scale)  #
         return preprocess_params
 
     def produce(self, output=None):
         table = self.read_file(self._filelist)
         preprocess_params = self.make_preprocess_params(table)
-        self._data_config.preprocess_params = preprocess_params
+        self._data_config.preprocess_params = preprocess_params  #
         # must also propagate the changes to `data_config.options` so it can be persisted
-        self._data_config.options['preprocess']['params'] = preprocess_params
+        self._data_config.options['preprocess']['params'] = preprocess_params  #
         if output:
             _logger.info(
-                'Writing YAML file w/ auto-generated preprocessing info to %s' % output)
-            self._data_config.dump(output)
-        return self._data_config
+                'Writing YAML file w/ auto-generated preprocessing info to %s' % output)  #
+            self._data_config.dump(output)  # write the data_config to the output file
+        return self._data_config  #
 
 
 class WeightMaker(object):
@@ -163,13 +169,13 @@ class WeightMaker(object):
         data_config (DataConfig): object containing data format information.
     """
 
-    def __init__(self, filelist, data_config):
+    def __init__(self, filelist, data_config):  #
         if isinstance(filelist, dict):
             filelist = sum(filelist.values(), [])
         self._filelist = filelist if isinstance(filelist, (list, tuple)) else glob.glob(filelist)
         self._data_config = data_config.copy()
 
-    def read_file(self, filelist):
+    def read_file(self, filelist):  #
         keep_branches = set(self._data_config.reweight_branches + self._data_config.reweight_classes)
         if self._data_config.reweight_basewgt:
             keep_branches.add(self._data_config.basewgt_name)
@@ -197,79 +203,82 @@ class WeightMaker(object):
         table = table[keep_branches]
         return table
 
-    def make_weights(self, table):
+    def make_weights(self, table):  #
         x_var, y_var = self._data_config.reweight_branches
         x_bins, y_bins = self._data_config.reweight_bins
         if not self._data_config.reweight_discard_under_overflow:
             # clip variables to be within bin ranges
-            x_min, x_max = min(x_bins), max(x_bins)
+            x_min, x_max = min(x_bins), max(x_bins)  #
             y_min, y_max = min(y_bins), max(y_bins)
-            _logger.info(f'Clipping `{x_var}` to [{x_min}, {x_max}] to compute the shapes for reweighting.')
+            _logger.info(f'Clipping `{x_var}` to [{x_min}, {x_max}] to compute the shapes for reweighting.')  #
             _logger.info(f'Clipping `{y_var}` to [{y_min}, {y_max}] to compute the shapes for reweighting.')
-            table[x_var] = np.clip(table[x_var], min(x_bins), max(x_bins))
+            table[x_var] = np.clip(table[x_var], min(x_bins), max(x_bins))  #
             table[y_var] = np.clip(table[y_var], min(y_bins), max(y_bins))
 
-        _logger.info('Using %d events to make weights', len(table))
+        _logger.info('Using %d events to make weights', len(table))  #
 
-        sum_evts = 0
+        sum_evts = 0  # sum of the number of events
         max_weight = 0.9
         raw_hists = {}
         class_events = {}
         result = {}
         for label in self._data_config.reweight_classes:
-            pos = (table[label] == 1)
-            x = ak.to_numpy(table[x_var][pos])
-            y = ak.to_numpy(table[y_var][pos])
-            hist, _, _ = np.histogram2d(x, y, bins=self._data_config.reweight_bins)
-            _logger.info('%s (unweighted):\n %s', label, str(hist.astype('int64')))
-            sum_evts += hist.sum()
-            if self._data_config.reweight_basewgt:
-                w = ak.to_numpy(table[self._data_config.basewgt_name][pos])
-                hist, _, _ = np.histogram2d(x, y, weights=w, bins=self._data_config.reweight_bins)
+            pos = (table[label] == 1)  # pos is a boolean array with the same shape as table[label]
+            x = ak.to_numpy(table[x_var][pos])  #
+            y = ak.to_numpy(table[y_var][pos])  #
+            hist, _, _ = np.histogram2d(x, y, bins=self._data_config.reweight_bins)  #
+            _logger.info('%s (unweighted):\n %s', label, str(hist.astype('int64')))  #
+            sum_evts += hist.sum()  #
+            if self._data_config.reweight_basewgt:  # physics weight
+                w = ak.to_numpy(table[self._data_config.basewgt_name][pos])  #
+                hist, _, _ = np.histogram2d(x, y, weights=w, bins=self._data_config.reweight_bins)  # way for divide bins has not change
                 _logger.info('%s (weighted):\n %s', label, str(hist.astype('float32')))
-            raw_hists[label] = hist.astype('float32')
+            raw_hists[label] = hist.astype('float32')  #
             result[label] = hist.astype('float32')
-        if sum_evts != len(table):
+
+            # self._data_config.reweight_basewgt is the weight for the physics purpose
+
+        if sum_evts != len(table):  #
             _logger.warning(
                 'Only %d (out of %d) events actually used in the reweighting. '
                 'Check consistency between `selection` and `reweight_classes` definition, or with the `reweight_vars` binnings '
                 '(under- and overflow bins are discarded by default, unless `reweight_discard_under_overflow` is set to `False` in the `weights` section).',
-                sum_evts, len(table))
+                sum_evts, len(table))  #
             time.sleep(10)
 
-        if self._data_config.reweight_method == 'flat':
-            for label, classwgt in zip(self._data_config.reweight_classes, self._data_config.class_weights):
-                hist = result[label]
-                threshold_ = np.median(hist[hist > 0]) * 0.01
-                nonzero_vals = hist[hist > threshold_]
+        if self._data_config.reweight_method == 'flat':  # bin contents weight
+            for label, classwgt in zip(self._data_config.reweight_classes, self._data_config.class_weights):  #
+                hist = result[label]  #
+                threshold_ = np.median(hist[hist > 0]) * 0.01  #
+                nonzero_vals = hist[hist > threshold_]  #
                 min_val, med_val = np.min(nonzero_vals), np.median(hist)  # not really used
-                ref_val = np.percentile(nonzero_vals, self._data_config.reweight_threshold)
+                ref_val = np.percentile(nonzero_vals, self._data_config.reweight_threshold)  # why we need this?
                 _logger.debug('label:%s, median=%f, min=%f, ref=%f, ref/min=%f' %
                               (label, med_val, min_val, ref_val, ref_val / min_val))
                 # wgt: bins w/ 0 elements will get a weight of 0; bins w/ content<ref_val will get 1
-                wgt = np.clip(np.nan_to_num(ref_val / hist, posinf=0), 0, 1)
-                result[label] = wgt
+                wgt = np.clip(np.nan_to_num(ref_val / hist, posinf=0), 0, 1)  # why get wgt by this way?
+                result[label] = wgt  #
                 # divide by classwgt here will effective increase the weight later
-                class_events[label] = np.sum(raw_hists[label] * wgt) / classwgt
-        elif self._data_config.reweight_method == 'ref':
+                class_events[label] = np.sum(raw_hists[label] * wgt) / classwgt  # if in raw_hist we have considered the physics weight, dose the class_events change the part of the physics trust?
+        elif self._data_config.reweight_method == 'ref':  #
             # use class 0 as the reference
-            hist_ref = raw_hists[self._data_config.reweight_classes[0]]
-            for label, classwgt in zip(self._data_config.reweight_classes, self._data_config.class_weights):
+            hist_ref = raw_hists[self._data_config.reweight_classes[0]]  #
+            for label, classwgt in zip(self._data_config.reweight_classes, self._data_config.class_weights):  #
                 # wgt: bins w/ 0 elements will get a weight of 0; bins w/ content<ref_val will get 1
-                ratio = np.nan_to_num(hist_ref / result[label], posinf=0)
-                upper = np.percentile(ratio[ratio > 0], 100 - self._data_config.reweight_threshold)
-                wgt = np.clip(ratio / upper, 0, 1)  # -> [0,1]
-                result[label] = wgt
+                ratio = np.nan_to_num(hist_ref / result[label], posinf=0)  #
+                upper = np.percentile(ratio[ratio > 0], 100 - self._data_config.reweight_threshold)  #
+                wgt = np.clip(ratio / upper, 0, 1)  # -> [0,1]  #
+                result[label] = wgt  #
                 # divide by classwgt here will effective increase the weight later
-                class_events[label] = np.sum(raw_hists[label] * wgt) / classwgt
+                class_events[label] = np.sum(raw_hists[label] * wgt) / classwgt  #
         # ''equalize'' all classes
         # multiply by max_weight (<1) to add some randomness in the sampling
-        min_nevt = min(class_events.values()) * max_weight
-        for label in self._data_config.reweight_classes:
-            class_wgt = float(min_nevt) / class_events[label]
-            result[label] *= class_wgt
+        min_nevt = min(class_events.values()) * max_weight  # min number of events
+        for label in self._data_config.reweight_classes:  #
+            class_wgt = float(min_nevt) / class_events[label]  #
+            result[label] *= class_wgt  #
 
-        if self._data_config.reweight_basewgt:
+        if self._data_config.reweight_basewgt:  #
             wgts = _build_weights(table, self._data_config, reweight_hists=result)
             _logger.info('Sample weight percentiles: %s', str(np.percentile(wgts, np.arange(101))))
             wgt_ref = np.percentile(wgts, 100 - self._data_config.reweight_threshold)
@@ -289,9 +298,9 @@ class WeightMaker(object):
         return result
 
     def produce(self, output=None):
-        table = self.read_file(self._filelist)
-        wgts = self.make_weights(table)
-        self._data_config.reweight_hists = wgts
+        table = self.read_file(self._filelist)  #
+        wgts = self.make_weights(table)  #
+        self._data_config.reweight_hists = wgts  #
         # must also propagate the changes to `data_config.options` so it can be persisted
         self._data_config.options['weights']['reweight_hists'] = {k: v.tolist() for k, v in wgts.items()}
         if output:

@@ -23,10 +23,10 @@ def _stack(arrays, axis=1):  # axis=0: stack vertically, axis=1: stack horizonta
     if isinstance(arrays[0], np.ndarray):  #
         return np.stack(arrays, axis=axis)  #
     else:  # maybe Akward
-        s = [slice(None)] * (arrays[0].ndim + 1)  # ???
-        s[axis] = np.newaxis
-        s = tuple(s)
-        return ak.concatenate([a.__getitem__(s) for a in arrays], axis=axis)
+        s = [slice(None)] * (arrays[0].ndim + 1)  #
+        s[axis] = np.newaxis  #
+        s = tuple(s)  #
+        return ak.concatenate([a.__getitem__(s) for a in arrays], axis=axis)  #
 
 
 def _pad(a, maxlen, value=0, dtype='float32'):
@@ -151,11 +151,12 @@ Name    Name
 
 
 
-def _eval_expr(expr, table):
-    tmp = {k: table[k] for k in _get_variable_names(expr)}
+def _eval_expr(expr, table):  #
+    tmp = {k: table[k] for k in _get_variable_names(expr)}  #
     tmp.update({'math': math, 'np': np, 'numpy': np, 'ak': ak, 'awkward': ak, 'len': len, '_hash': _hash,
                 '_concat': _concat, '_stack': _stack, '_pad': _pad, '_repeat_pad': _repeat_pad, '_clip': _clip,
                 '_batch_knn': _batch_knn, '_batch_permute_indices': _batch_permute_indices,
                 '_batch_argsort': _batch_argsort, '_batch_gather': _batch_gather, '_p4_from_pxpypze': _p4_from_pxpypze,
-                '_p4_from_ptetaphie': _p4_from_ptetaphie, '_p4_from_ptetaphim': _p4_from_ptetaphim})
-    return eval(expr, tmp)
+                '_p4_from_ptetaphie': _p4_from_ptetaphie, '_p4_from_ptetaphim': _p4_from_ptetaphim})  # add some libraries to the tmp dictionary, for complex expressions
+    return eval(expr, tmp)  # it means evaluate the expression with the variables in tmp, if the expression is 'a + b', then it will return the value of a + b
+                            # eg _eval_expr('a + b', {'a': 1, 'b': 2}) -> 3

@@ -262,8 +262,8 @@ class DataConfig(object):
     def load(cls, fp, load_observers=True, load_reweight_info=True, extra_selection=None, extra_test_selection=None):
         """"
         input:
-        cls: DataConfig
-        fp: file path
+        cls: Class itself
+        fp: config file path
 
         return:
         DataConfig object
@@ -314,4 +314,4 @@ class DataConfig(object):
                     'pad': info['pad_value']
                 }
         with open(fp, 'w') as f:
-            json.dump(j, f, indent=2)
+            json.dump(j, f, indent=2)  # dump the json object to the file

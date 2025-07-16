@@ -299,10 +299,10 @@ def evaluate_onnx(model_path, test_loader, eval_metrics=['roc_auc_score', 'roc_a
 
 def train_regression(
         model, loss_func, opt, scheduler, train_loader, dev, epoch, steps_per_epoch=None, grad_scaler=None,
-        tb_helper=None):
-    model.train()
+        tb_helper=None):  #
+    model.train()  #
 
-    data_config = train_loader.dataset.config
+    data_config = train_loader.dataset.config  #
 
     total_loss = 0
     num_batches = 0
@@ -310,29 +310,29 @@ def train_regression(
     sum_sqr_err = 0
     count = 0
     start_time = time.time()
-    with tqdm.tqdm(train_loader) as tq:
+    with tqdm.tqdm(train_loader) as tq:  # tqdm.tqdm(train_loader) means to show the progress bar
         for X, y, _ in tq:
-            inputs = [X[k].to(dev) for k in data_config.input_names]
-            label = y[data_config.label_names[0]].float()
-            num_examples = label.shape[0]
-            label = label.to(dev)
-            opt.zero_grad()
-            with torch.cuda.amp.autocast(enabled=grad_scaler is not None):
-                model_output = model(*inputs)
-                preds = model_output.squeeze()
-                loss = loss_func(preds, label)
+            inputs = [X[k].to(dev) for k in data_config.input_names]  #
+            label = y[data_config.label_names[0]].float()  #
+            num_examples = label.shape[0]  #
+            label = label.to(dev)  #
+            opt.zero_grad()  #
+            with torch.cuda.amp.autocast(enabled=grad_scaler is not None):  #
+                model_output = model(*inputs)  #
+                preds = model_output.squeeze()  #
+                loss = loss_func(preds, label)  #
             if grad_scaler is None:
-                loss.backward()
-                opt.step()
+                loss.backward()  #
+                opt.step()  #
             else:
-                grad_scaler.scale(loss).backward()
-                grad_scaler.step(opt)
-                grad_scaler.update()
+                grad_scaler.scale(loss).backward()  #
+                grad_scaler.step(opt)  #
+                grad_scaler.update()  #
 
-            if scheduler and getattr(scheduler, '_update_per_step', False):
-                scheduler.step()
+            if scheduler and getattr(scheduler, '_update_per_step', False):  #
+                scheduler.step()  #
 
-            loss = loss.item()
+            loss = loss.item()  # convert loss to a scalar
 
             num_batches += 1
             count += num_examples

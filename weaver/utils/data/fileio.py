@@ -32,26 +32,26 @@ def _read_root(filepath, branches, load_range=None, treename=None, branch_magic=
                     'Need to specify `treename` as more than one trees are found in file %s: %s' %
                     (filepath, str(treenames)))
         tree = f[treename]
-        if load_range is not None:
-            start = math.trunc(load_range[0] * tree.num_entries)
-            stop = max(start + 1, math.trunc(load_range[1] * tree.num_entries))
+        if load_range is not None:  #
+            start = math.trunc(load_range[0] * tree.num_entries)  # load_range: (start, stop), load_range[0]: start
+            stop = max(start + 1, math.trunc(load_range[1] * tree.num_entries))  #
         else:
-            start, stop = None, None
-        if branch_magic is not None:
-            branch_dict = {}
-            for name in branches:
-                decoded_name = name
+            start, stop = None, None  #
+        if branch_magic is not None:  #
+            branch_dict = {}  #
+            for name in branches:  #
+                decoded_name = name  #
                 for src, tgt in branch_magic.items():
                     if src in decoded_name:
-                        decoded_name = decoded_name.replace(src, tgt)
-                branch_dict[name] = decoded_name
-            outputs = tree.arrays(filter_name=list(branch_dict.values()), entry_start=start, entry_stop=stop)
-            for name, decoded_name in branch_dict.items():
+                        decoded_name = decoded_name.replace(src, tgt)  # replace src with tgt, eg 'a' with 'b', used when reading root files
+                branch_dict[name] = decoded_name  #
+            outputs = tree.arrays(filter_name=list(branch_dict.values()), entry_start=start, entry_stop=stop)  # get data by name in raw root file
+            for name, decoded_name in branch_dict.items():  #
                 if name != decoded_name:
-                    outputs[name] = outputs[decoded_name]
+                    outputs[name] = outputs[decoded_name]  # eg pt(raw) = [1,2,3] -output> PT = [1,2,3], pt = [1,2,3]
         else:
             outputs = tree.arrays(filter_name=branches, entry_start=start, entry_stop=stop)
-    return outputs
+    return outputs  # outputs is a dict
 
 
 def _read_awkd(filepath, branches, load_range=None):
@@ -76,7 +76,7 @@ def _read_parquet(filepath, branches, load_range=None):
     return outputs
 
 
-def _read_files(filelist, branches, load_range=None, show_progressbar=False, file_magic=None, **kwargs):
+def _read_files(filelist, branches, load_range=None, show_progressbar=False, file_magic=None, **kwargs):  #
     import os
     branches = list(branches)
     table = []
@@ -91,8 +91,8 @@ def _read_files(filelist, branches, load_range=None, show_progressbar=False, fil
                 a = _read_hdf5(filepath, branches, load_range=load_range)
             elif ext == '.root':
                 a = _read_root(filepath, branches, load_range=load_range,
-                               treename=kwargs.get('treename', None),
-                               branch_magic=kwargs.get('branch_magic', None))
+                               treename=kwargs.get('treename', None),  # get the value of 'treename' key, which in kwargs, I known how to use **kwargs.
+                               branch_magic=kwargs.get('branch_magic', None))  # return a dict
             elif ext == '.awkd':
                 a = _read_awkd(filepath, branches, load_range=load_range)
             elif ext == '.parquet':
@@ -102,7 +102,7 @@ def _read_files(filelist, branches, load_range=None, show_progressbar=False, fil
             _logger.error('When reading file %s:', filepath)
             _logger.error(traceback.format_exc())
         if a is not None:
-            if file_magic is not None:
+            if file_magic is not None:  #
                 import re
                 for var, value_dict in file_magic.items():
                     if var in a.fields:
@@ -110,11 +110,11 @@ def _read_files(filelist, branches, load_range=None, show_progressbar=False, fil
                                      f'but will be OVERWRITTEN by file_magic {value_dict}.')
                     a[var] = 0
                     for fn_pattern, value in value_dict.items():
-                        if re.search(fn_pattern, filepath):
+                        if re.search(fn_pattern, filepath):  # eg: if a filepath includes 'signal' but there is no signal in the file, then add a[singal] = 1
                             a[var] = value
                             break
-            table.append(a)
-    table = _concat(table)  # ak.Array
+            table.append(a)  # [dict1, dict2, ...]
+    table = _concat(table)  #
     if len(table) == 0:
         raise RuntimeError(f'Zero entries loaded when reading files {filelist} with `load_range`={load_range}.')
     return table
