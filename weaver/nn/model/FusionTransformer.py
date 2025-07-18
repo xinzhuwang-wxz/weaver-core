@@ -24,17 +24,17 @@ def delta_r2(eta1, phi1, eta2, phi2):
 
 
 def to_pt2(x, eps=1e-8):
-    pt2 = x[:, :2].square().sum(dim=1, keepdim=True)
+    pt2 = x[:, :2].square().sum(dim=1, keepdim=True)  # x[:, :2] is (px, py), [N,2]; .sum(dim=1, keepdim=True) [N,2] -> [N,1]
     if eps is not None:
         pt2 = pt2.clamp(min=eps)
-    return pt2
+    return pt2  # [N,1]
 
 
 def to_m2(x, eps=1e-8):
-    m2 = x[:, 3:4].square() - x[:, :3].square().sum(dim=1, keepdim=True)
+    m2 = x[:, 3:4].square() - x[:, :3].square().sum(dim=1, keepdim=True)  # x[:, 3:4] is E, x[:, :3] is (px, py, pz)
     if eps is not None:
         m2 = m2.clamp(min=eps)
-    return m2
+    return m2  # [N,1]
 
 
 def atan2(y, x):
@@ -47,7 +47,7 @@ def atan2(y, x):
 
 def to_ptrapphim(x, return_mass=True, eps=1e-8, for_onnx=False):
     # x: (N, 4, ...), dim1 : (px, py, pz, E)
-    px, py, pz, energy = x.split((1, 1, 1, 1), dim=1)
+    px, py, pz, energy = x.split((1, 1, 1, 1), dim=1)  # shape of px is (N, 1, ...)
     pt = torch.sqrt(to_pt2(x, eps=eps))
     # rapidity = 0.5 * torch.log((energy + pz) / (energy - pz))
     rapidity = 0.5 * torch.log(1 + (2 * pz) / (energy - pz).clamp(min=1e-20))
@@ -56,7 +56,7 @@ def to_ptrapphim(x, return_mass=True, eps=1e-8, for_onnx=False):
         return torch.cat((pt, rapidity, phi), dim=1)
     else:
         m = torch.sqrt(to_m2(x, eps=eps))
-        return torch.cat((pt, rapidity, phi, m), dim=1)
+        return torch.cat((pt, rapidity, phi, m), dim=1)  # [N, 4]
 
 
 def boost(x, boostp4, eps=1e-8):
@@ -77,6 +77,12 @@ def p3_norm(p, eps=1e-8):
 
 
 def pairwise_lv_fts(xi, xj, num_outputs=4, eps=1e-8, for_onnx=False):
+    """
+    xi shape: (N, 4, ...), dim1 : (px, py, pz, E)
+    for num_outputs=4,
+        outputs: (N, 4, ...), dim1 : (pt, rap, phi, m) for normal
+
+    """
     pti, rapi, phii = to_ptrapphim(xi, False, eps=None, for_onnx=for_onnx).split((1, 1, 1), dim=1)
     ptj, rapj, phij = to_ptrapphim(xj, False, eps=None, for_onnx=for_onnx).split((1, 1, 1), dim=1)
 
@@ -91,7 +97,7 @@ def pairwise_lv_fts(xi, xj, num_outputs=4, eps=1e-8, for_onnx=False):
         lnz = torch.log((ptmin / (pti + ptj).clamp(min=eps)).clamp(min=eps))
         outputs = [lnkt, lnz, lndelta]
 
-    if num_outputs > 3:
+    if num_outputs > 3:  #
         xij = xi + xj
         lnm2 = torch.log(to_m2(xij, eps=eps))
         outputs.append(lnm2)
@@ -183,7 +189,7 @@ def trunc_normal_(tensor, mean=0., std=1., a=-2., b=2.):
         return tensor
 
 
-class SequenceTrimmer(nn.Module):
+class SequenceTrimmer(nn.Module):  # used to trim the sequence length of input particles
 
     def __init__(self, enabled=False, target=(0.9, 1.02), **kwargs) -> None:
         super().__init__(**kwargs)
@@ -192,7 +198,7 @@ class SequenceTrimmer(nn.Module):
         self._counter = 0
 
     def forward(self, x, v=None, mask=None, uu=None):
-        # x: (N, C, P)
+        # x: (N, C, P)  # C is the number of features, P is the number of particles, N is the batch size
         # v: (N, 4, P) [px,py,pz,energy]
         # mask: (N, 1, P) -- real particle = 1, padded = 0
         # uu: (N, C', P, P)
@@ -231,7 +237,7 @@ class SequenceTrimmer(nn.Module):
         return x, v, mask, uu
 
 
-class Embed(nn.Module):
+class Embed(nn.Module):  # 注意，x_input shape is (batch, embed_dim, seq_len)
     def __init__(self, input_dim, dims, normalize_input=True, activation='gelu'):
         super().__init__()
 
@@ -327,6 +333,14 @@ class PairEmbed(nn.Module):
             raise RuntimeError('`mode` can only be `sum` or `concat`')
 
     def forward(self, x, uu=None):
+        """
+        x: (batch, v_dim, seq_len)
+        uu: (batch, v_dim, seq_len, seq_len)
+
+        input shape [batch, v_dim, seq_len] or [batch, v_dim, seq_len, seq_len]
+        output shape [batch, out_dim, seq_len, seq_len]
+
+        """
         # x: (batch, v_dim, seq_len)
         # uu: (batch, v_dim, seq_len, seq_len)
         assert (x is not None or uu is not None)
@@ -339,9 +353,9 @@ class PairEmbed(nn.Module):
                 i, j = torch.tril_indices(seq_len, seq_len, offset=-1 if self.remove_self_pair else 0,
                                           device=(x if x is not None else uu).device)
                 if x is not None:
-                    x = x.unsqueeze(-1).repeat(1, 1, 1, seq_len)
-                    xi = x[:, :, i, j]  # (batch, dim, seq_len*(seq_len+1)/2)
-                    xj = x[:, :, j, i]
+                    x = x.unsqueeze(-1).repeat(1, 1, 1, seq_len)  # repeat means from [batch, dim, seq_len] to [batch, dim, seq_len, seq_len]
+                    xi = x[:, :, i, j]  # [batch, 4, i, j]
+                    xj = x[:, :, j, i]  # [batch, 4, j, i]
                     x = self.pairwise_lv_fts(xi, xj)
                 if uu is not None:
                     # (batch, dim, seq_len*(seq_len+1)/2)
@@ -379,7 +393,19 @@ class PairEmbed(nn.Module):
             y[:, :, j, i] = elements
         else:
             y = elements.view(-1, self.out_dim, seq_len, seq_len)
-        return y
+        return y  # (batch, out_dim, seq_len, seq_len)
+
+###
+
+
+
+
+
+
+
+
+
+
 
 
 class Block(nn.Module):
@@ -411,7 +437,7 @@ class Block(nn.Module):
         self.post_fc_norm = nn.LayerNorm(self.ffn_dim) if scale_fc else None
         self.fc2 = nn.Linear(self.ffn_dim, embed_dim)
 
-        self.c_attn = nn.Parameter(torch.ones(num_heads), requires_grad=True) if scale_heads else None
+        self.c_attn = nn.Parameter(torch.ones(num_heads), requires_grad=True) if scale_heads else None  # c_atten means class attention
         self.w_resid = nn.Parameter(torch.ones(embed_dim), requires_grad=True) if scale_resids else None
 
     def forward(self, x, x_cls=None, padding_mask=None, attn_mask=None):
@@ -422,6 +448,7 @@ class Block(nn.Module):
             padding_mask (ByteTensor, optional): binary
                 ByteTensor of shape `(batch, seq_len)` where padding
                 elements are indicated by ``1``.
+            attn_mask (ByteTensor, optional): binary
 
         Returns:
             encoded output of shape `(seq_len, batch, embed_dim)`
