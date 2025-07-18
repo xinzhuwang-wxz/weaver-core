@@ -248,7 +248,7 @@ class Embed(nn.Module):
 
     def forward(self, x):
         if self.input_bn is not None:
-            # x: (batch, embed_dim, seq_len)
+            # x: (batch, embed_dim, seq_len) ，BatchNorm1d expects
             x = self.input_bn(x)
             x = x.permute(2, 0, 1).contiguous()
         # x: (seq_len, batch, embed_dim)
@@ -261,6 +261,16 @@ class PairEmbed(nn.Module):
             remove_self_pair=False, use_pre_activation_pair=True, mode='sum',
             normalize_input=True, activation='gelu', eps=1e-8,
             for_onnx=False):
+        """
+
+        pairwise_lv_dim: number of pairwise features from lv (e.g. pt, rap, phi, m), lv means lorentz vector, i.e. px, py, pz, E
+        pairwise_input_dim : extra number of pairwise features, if not, set to 0
+        use_pre_activation_pair : whether to use pre-activation for pairwise features,
+                                    if True, the last layer of pairwise features will be removed, prevent activation from interfering with message delivery
+
+
+
+        """
         super().__init__()
 
         self.pairwise_lv_dim = pairwise_lv_dim
@@ -269,7 +279,7 @@ class PairEmbed(nn.Module):
         self.remove_self_pair = remove_self_pair
         self.mode = mode
         self.for_onnx = for_onnx
-        self.pairwise_lv_fts = partial(pairwise_lv_fts, num_outputs=pairwise_lv_dim, eps=eps, for_onnx=for_onnx)
+        self.pairwise_lv_fts = partial(pairwise_lv_fts, num_outputs=pairwise_lv_dim, eps=eps, for_onnx=for_onnx)  # partial function to avoid passing num_outputs,eps,for_onnx every time
         self.out_dim = dims[-1]
 
         if self.mode == 'concat':
