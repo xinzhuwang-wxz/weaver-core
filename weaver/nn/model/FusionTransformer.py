@@ -1,6 +1,6 @@
 ''' Particle Transformer (ParT)
 
-Paper: "Particle Transformer for Jet Tagging" - https://arxiv.org/abs/2202.03772
+Paper: "Particle Transformer for Jet Tagging" - https://arxiv.org/abs/2202.03772。#
 '''
 import math
 import random
